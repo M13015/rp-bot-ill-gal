@@ -1,24 +1,31 @@
-const mongoose = require("mongoose");
+const sqlite3 = require("sqlite3").verbose();
+const db = new sqlite3.Database("./rp.db");
 
-mongoose.connect(process.env.MONGO_URI)
-.then(() => console.log("✅ MongoDB connecté"))
-.catch(err => console.log("❌ DB error", err));
+db.serialize(() => {
 
-const Gang = mongoose.model("Gang", new mongoose.Schema({
-name: String,
-type: String,
-points: { type: Number, default: 0 },
-leader: String,
-channel: String
-}));
+db.run(`
+CREATE TABLE IF NOT EXISTS gangs (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+name TEXT UNIQUE,
+type TEXT,
+points INTEGER DEFAULT 0,
+leader TEXT,
+channel TEXT
+)
+`);
 
-const Log = mongoose.model("Log", new mongoose.Schema({
-gang: String,
-type: String,
-points: Number,
-reason: String,
-staff: String,
-date: String
-}));
+db.run(`
+CREATE TABLE IF NOT EXISTS history (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+gang TEXT,
+action TEXT,
+points INTEGER,
+reason TEXT,
+staff TEXT,
+date TEXT
+)
+`);
 
-module.exports = { Gang, Log };
+});
+
+module.exports = db;
