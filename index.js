@@ -34,37 +34,38 @@ function log(text, user) {
 const channel = client.channels.cache.get(process.env.LOG_CHANNEL);
 if (!channel) return;
 
-const embed = new EmbedBuilder()
+channel.send({
+embeds: [
+new EmbedBuilder()
 .setColor("#FFA500")
 .setDescription(`📜 ${text}`)
 .setFooter({
 text: user.tag,
 iconURL: user.displayAvatarURL()
 })
-.setTimestamp();
-
-channel.send({ embeds: [embed] });
+.setTimestamp()
+]
+});
 }
 
 /* ================= LOG GANG ================= */
 
 function sendGangLog(gangName, text) {
 
-db.get("SELECT channel FROM gangs WHERE name = ?", [gangName], (err,row) => {
-
+const row = db.prepare("SELECT channel FROM gangs WHERE name = ?").get(gangName);
 if (!row) return;
 
 const channel = client.channels.cache.get(row.channel);
 if (!channel) return;
 
-const embed = new EmbedBuilder()
+channel.send({
+embeds: [
+new EmbedBuilder()
 .setColor("#FFA500")
 .setTitle(`📢 ${gangName}`)
 .setDescription(text)
-.setTimestamp();
-
-channel.send({ embeds:[embed] });
-
+.setTimestamp()
+]
 });
 }
 
@@ -77,11 +78,11 @@ async function updateRank() {
 const channel = client.channels.cache.get(process.env.RANK_CHANNEL);
 if (!channel) return;
 
-db.all("SELECT * FROM gangs ORDER BY points DESC", async (err, rows) => {
+const rows = db.prepare("SELECT * FROM gangs ORDER BY points DESC").all();
 
 let desc = "";
 
-if (!rows || rows.length === 0) {
+if (!rows.length) {
 desc = "❌ Aucun gang";
 } else {
 const medals = ["🥇","🥈","🥉"];
@@ -103,7 +104,6 @@ return msg.edit({ embeds: [embed] });
 const msg = await channel.send({ embeds: [embed] });
 rankMessageId = msg.id;
 } catch {}
-});
 }
 
 /* ================= BOT ================= */
@@ -114,21 +114,15 @@ if (!interaction.isChatInputCommand() &&
 !interaction.isStringSelectMenu() &&
 !interaction.isModalSubmit()) return;
 
-/* ================= TEST ================= */
-
-if (interaction.commandName === "test") {
-return interaction.reply("✅ OK");
-}
-
 /* ================= LIST ================= */
 
 if (interaction.commandName === "list") {
 
 await interaction.deferReply({ ephemeral: true });
 
-db.all("SELECT * FROM gangs ORDER BY points DESC", (err, rows) => {
+const rows = db.prepare("SELECT * FROM gangs ORDER BY points DESC").all();
 
-if (!rows || rows.length === 0)
+if (!rows.length)
 return interaction.editReply("❌ aucun gang");
 
 let desc = "";
@@ -146,28 +140,26 @@ new EmbedBuilder()
 .setDescription(desc)
 ]
 });
-});
 }
 
-/* ================= REP AVEC HISTORIQUE ================= */
+/* ================= REP ================= */
 
 if (interaction.commandName === "rep") {
 
 await interaction.deferReply({ ephemeral:true });
 
-db.get("SELECT * FROM gangs WHERE leader = ?", [interaction.user.id], (err,gang) => {
+const gang = db.prepare("SELECT * FROM gangs WHERE leader = ?")
+.get(interaction.user.id);
 
 if (!gang)
 return interaction.editReply("❌ Tu n'es pas leader");
 
-db.all(
-"SELECT * FROM history WHERE gang = ? ORDER BY id DESC LIMIT 10",
-[gang.name],
-(err,rows) => {
+const rows = db.prepare("SELECT * FROM history WHERE gang = ? ORDER BY id DESC LIMIT 10")
+.all(gang.name);
 
 let historyText = "";
 
-if (!rows || rows.length === 0) {
+if (!rows.length) {
 historyText = "Aucun historique";
 } else {
 rows.forEach(h => {
@@ -184,8 +176,6 @@ new EmbedBuilder()
 `Type: ${gang.type}\nPoints: ⭐ ${gang.points}\n\n📜 Historique :\n${historyText}`
 )
 ]
-});
-});
 });
 }
 
@@ -226,10 +216,10 @@ const lead = parts[2];
 const channel = parts[3];
 const type = interaction.values[0];
 
-db.run(
-"INSERT INTO gangs(name,type,points,leader,channel) VALUES (?,?,?,?,?)",
-[name,type,0,lead,channel]
-);
+db.prepare(`
+INSERT INTO gangs(name,type,points,leader,channel)
+VALUES (?,?,?,?,?)
+`).run(name,type,0,lead,channel);
 
 log(`🏴 ${name} créé`, interaction.user);
 updateRank();
@@ -246,7 +236,7 @@ return interaction.reply({ content:"❌ pas accès", ephemeral:true });
 
 await interaction.deferReply({ ephemeral:true });
 
-db.all("SELECT * FROM gangs", (err,rows) => {
+const rows = db.prepare("SELECT * FROM gangs").all();
 
 const menu = new StringSelectMenuBuilder()
 .setCustomId("delete");
@@ -258,14 +248,13 @@ menu.addOptions({ label:g.name, value:g.name })
 interaction.editReply({
 components:[new ActionRowBuilder().addComponents(menu)]
 });
-});
 }
 
 if (interaction.isStringSelectMenu() && interaction.customId === "delete") {
 
 const name = interaction.values[0];
 
-db.run("DELETE FROM gangs WHERE name = ?", [name]);
+db.prepare("DELETE FROM gangs WHERE name = ?").run(name);
 
 log(`🗑 ${name} supprimé`, interaction.user);
 updateRank();
@@ -282,7 +271,7 @@ return interaction.reply({ content:"❌ pas accès", ephemeral:true });
 
 await interaction.deferReply({ ephemeral:true });
 
-db.all("SELECT * FROM gangs", (err,rows) => {
+const rows = db.prepare("SELECT * FROM gangs").all();
 
 const menu = new StringSelectMenuBuilder()
 .setCustomId("add_select");
@@ -293,7 +282,6 @@ menu.addOptions({ label:g.name, value:g.name })
 
 interaction.editReply({
 components:[new ActionRowBuilder().addComponents(menu)]
-});
 });
 }
 
@@ -306,7 +294,7 @@ return interaction.reply({ content:"❌ pas accès", ephemeral:true });
 
 await interaction.deferReply({ ephemeral:true });
 
-db.all("SELECT * FROM gangs", (err,rows) => {
+const rows = db.prepare("SELECT * FROM gangs").all();
 
 const menu = new StringSelectMenuBuilder()
 .setCustomId("remove_select");
@@ -317,7 +305,6 @@ menu.addOptions({ label:g.name, value:g.name })
 
 interaction.editReply({
 components:[new ActionRowBuilder().addComponents(menu)]
-});
 });
 }
 
@@ -371,12 +358,13 @@ const gang = interaction.customId.replace("add_","");
 const points = parseInt(interaction.fields.getTextInputValue("points"));
 const reason = interaction.fields.getTextInputValue("reason");
 
-db.run("UPDATE gangs SET points = points + ? WHERE name = ?", [points, gang]);
+db.prepare("UPDATE gangs SET points = points + ? WHERE name = ?")
+.run(points, gang);
 
-db.run(
-"INSERT INTO history(gang,action,points,reason,staff,date) VALUES (?,?,?,?,?,?)",
-[gang,"add",points,reason,interaction.user.id,new Date().toLocaleString()]
-);
+db.prepare(`
+INSERT INTO history(gang,action,points,reason,staff,date)
+VALUES (?,?,?,?,?,?)
+`).run(gang,"add",points,reason,interaction.user.id,new Date().toLocaleString());
 
 sendGangLog(gang, `➕ +${points}\n📌 ${reason}`);
 updateRank();
@@ -392,12 +380,13 @@ const gang = interaction.customId.replace("remove_","");
 const points = parseInt(interaction.fields.getTextInputValue("points"));
 const reason = interaction.fields.getTextInputValue("reason");
 
-db.run("UPDATE gangs SET points = points - ? WHERE name = ?", [points, gang]);
+db.prepare("UPDATE gangs SET points = points - ? WHERE name = ?")
+.run(points, gang);
 
-db.run(
-"INSERT INTO history(gang,action,points,reason,staff,date) VALUES (?,?,?,?,?,?)",
-[gang,"remove",points,reason,interaction.user.id,new Date().toLocaleString()]
-);
+db.prepare(`
+INSERT INTO history(gang,action,points,reason,staff,date)
+VALUES (?,?,?,?,?,?)
+`).run(gang,"remove",points,reason,interaction.user.id,new Date().toLocaleString());
 
 sendGangLog(gang, `➖ -${points}\n📌 ${reason}`);
 updateRank();
